@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import threading
 import time
+from video_processor import VideoProcessor
 
 app = Flask(__name__)
 CORS(app)
@@ -21,6 +22,9 @@ FRAME_HEIGHT = 192
 # Variável global para compartilhar o frame mais recente entre as rotas
 global_frame = None
 lock = threading.Lock() # Trava de segurança para threads
+
+# Processador de vídeo para análise
+video_processor = None
 
 def start_camera_thread():
     """
@@ -40,11 +44,19 @@ def start_camera_thread():
     cap.set(cv2.CAP_PROP_FPS, 25)
 
     if not cap.isOpened():
-        print(f"❌ ERRO CRÍTICO: Não foi possível abrir a câmera {CAMERA_INDEX}.")
-        print("Verifique se o adaptador USB está bem conectado no Raspberry Pi.")
-        return
+        print(f"⚠️ Câmera não disponível. Usando vídeo de fallback...")
+        # Usa o vídeo gerado como fallback
+        video_path = os.path.join(os.path.dirname(__file__), 'video_granja.mp4')
+        if os.path.exists(video_path):
+            cap = cv2.VideoCapture(video_path)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+            print("✅ Vídeo de fallback carregado com sucesso!")
+        else:
+            print(f"❌ ERRO CRÍTICO: Vídeo de fallback não encontrado.")
+            return
 
-    print("✅ Câmera Térmica Iniciada com Sucesso!")
+    print("✅ Fonte de vídeo Iniciada com Sucesso!")
 
     while True:
         success, frame = cap.read()
@@ -52,8 +64,9 @@ def start_camera_thread():
             with lock:
                 global_frame = frame.copy()
         else:
-            print("Aviso: Falha ao ler frame da câmera.")
-            time.sleep(1) # Espera um pouco antes de tentar de novo
+            # Se chegar ao fim do vídeo, reinicia
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            time.sleep(0.1)
             
         time.sleep(0.01) # Pequena pausa para economizar CPU do Raspberry
             
@@ -61,6 +74,14 @@ def start_camera_thread():
 t = threading.Thread(target=start_camera_thread)
 t.daemon = True # Garante que a thread morra quando fechar o programa
 t.start()
+
+# Inicializa o processador de vídeo para análise
+video_path = os.path.join(os.path.dirname(__file__), 'video_granja.mp4')
+if os.path.exists(video_path):
+    video_processor = VideoProcessor(video_path)
+    print("✓ Processador de vídeo initialized")
+else:
+    print("⚠️ Vídeo de fallback não encontrado para análise")
 
 def generate_frames():
     """Gerador de frames para o Streaming MJPEG"""
@@ -101,8 +122,17 @@ def serve_video_file():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    global global_frame
+    global global_frame, video_processor
     
+    # Usa o processador de vídeo para análise quando disponível
+    if video_processor is not None:
+        try:
+            analysis = video_processor.process_frame()
+            return jsonify(analysis)
+        except Exception as e:
+            print(f"Erro na análise: {e}")
+    
+    # Fallback para análise básica quando processador não disponível
     with lock:
         if global_frame is None:
             return jsonify({
