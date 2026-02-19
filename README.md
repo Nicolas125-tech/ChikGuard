@@ -44,7 +44,7 @@ ngrok config add-authtoken 1a2b3c4d5e6f7g8h9i0_token_falso_aqui
 ```
 5.1 
 ```bash
-ngrok config add-authtoken 1a2b3c4d5e6f7g8h9i0_token_falso_aqui
+ngrok http 5000
 ```
 
 6. Execute o servidor:
