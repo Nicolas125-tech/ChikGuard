@@ -31,8 +31,13 @@ venv\Scripts\activate  # Windows
 ```bash
 pip install -r requirements.txt
 ```
+4. Instale as dependências:
 
-4. Execute o servidor:
+```bash
+pip install flask-bcrypt flask-sqlalchemy flask-jwt-extended
+```
+
+5. Execute o servidor:
 ```bash
 python app.py
 ```
